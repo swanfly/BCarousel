@@ -29,7 +29,11 @@ public struct BCarousel<Data, ID, Content> : View where Data : RandomAccessColle
     private let content: (Data.Element) -> Content
     
     public var body: some View {
-        GeometryReader { proxy -> AnyView in
+        // 外部 index → 内部同步：本视图未重建（init 未重新执行）、仅 index Binding 值变化
+        // 触发 body 重算时，由 syncExternalIndex 补上同步，保证外部改 index 能跳页
+        //（同值时为 no-op；内部变化先经 willSet 写回 index，不会被误重置）
+        viewModel.syncExternalIndex()
+        return GeometryReader { proxy -> AnyView in
             viewModel.viewSize = proxy.size
             return AnyView(generateContent(proxy: proxy))
         }.clipped()

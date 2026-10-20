@@ -39,9 +39,9 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
     
     init(_ data: Data, id: KeyPath<Data.Element, ID>, index: Binding<Int>, spacing: CGFloat, headspace: CGFloat, sidesScaling: CGFloat, isWrap: Bool, autoScroll: BCarouselAutoScroll, canMove: Bool) {
         
-        guard index.wrappedValue < data.count else {
-            fatalError("The index should be less than the count of data ")
-        }
+        // 数据源为空或父视图刷新后变短时 index 可能越界，收敛到合法范围
+        //（原实现对越界 fatalError，数据源变化后会直接崩溃）
+        let safeIndex = data.isEmpty ? 0 : max(0, min(index.wrappedValue, data.count - 1))
         
         self._data = data
         self._dataId = id
@@ -53,10 +53,13 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
         self._canMove = canMove
         
         if data.count > 1 && isWrap {
-            activeIndex = index.wrappedValue + 1
+            activeIndex = safeIndex + 1
         } else {
-            activeIndex = index.wrappedValue
+            activeIndex = safeIndex
         }
+        
+        // 记录初始外部 index，供 syncExternalIndex 判断外部是否真的变化过
+        lastExternalIndex = index.wrappedValue
         
         self._index = index
     }
@@ -76,6 +79,35 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
         }
         didSet {
             changeOffset()
+        }
+    }
+    
+    /// 上次同步到内部的外部 index 值：外部值与它一致时说明外部没有变化
+    ///（含 index 为 .constant 时写不进去的情形），跳过同步，避免把内部状态误重置回旧 index
+    private var lastExternalIndex: Int?
+    
+    /// 外部 index → 内部 activeIndex 的同步（body 求值时调用）。
+    /// activeIndex 的 willSet 只负责内部 → 外部；init 只在视图重建时读取一次 index，
+    /// 视图未重建、仅 index Binding 值变化触发 body 重算时不会经过 init，由这里补上同步，
+    /// 保证外部改 index 能跳页。同值时为 no-op（内部 willSet 写回的值与外部一致），不会形成回环。
+    func syncExternalIndex() {
+        let externalIndex = index
+        if let last = lastExternalIndex, last == externalIndex {
+            return
+        }
+        lastExternalIndex = externalIndex
+        
+        guard _data.count > 0 else {
+            if activeIndex != 0 {
+                activeIndex = 0
+            }
+            return
+        }
+        // 数据可能已变短，越界时收敛到合法范围
+        let clampedIndex = max(0, min(externalIndex, _data.count - 1))
+        let target = isWrap ? clampedIndex + 1 : clampedIndex
+        if activeIndex != target {
+            activeIndex = target
         }
     }
     
