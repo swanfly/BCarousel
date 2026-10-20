@@ -28,6 +28,11 @@ public struct BCarousel<Data, ID, Content> : View where Data : RandomAccessColle
     private var viewModel: BCarouselViewModel<Data, ID>
     private let content: (Data.Element) -> Content
     
+    /// 拖动偏移量：@GestureState 在手势结束**或被取消**时自动归零。
+    /// 修复手势被 ScrollView/系统手势抢占后 onEnded 不调用、dragOffset 残留，
+    /// 导致 offset 不再是页宽整数倍、两页各露一部分且不自愈的问题
+    @GestureState private var dragOffset: CGFloat = 0
+    
     public var body: some View {
         // 外部 index → 内部同步：本视图未重建（init 未重新执行）、仅 index Binding 值变化
         // 触发 body 重算时，由 syncExternalIndex 补上同步，保证外部改 index 能跳页
@@ -40,7 +45,11 @@ public struct BCarousel<Data, ID, Content> : View where Data : RandomAccessColle
     }
     
     private func generateContent(proxy: GeometryProxy) -> some View {
-        HStack(spacing: viewModel.spacing) {
+        // 拖动状态同步给 viewModel（body 求值时写入，非 @Published 不触发刷新）：
+        // 自动轮播在拖动中暂停（原实现在 dragChanged/dragEnded 里开关 isTimerActive，
+        // 手势被取消时 onEnded 不调用会导致轮播永久停摆，改为由 dragOffset 推导无残留）
+        viewModel.isDragging = dragOffset != 0
+        return HStack(spacing: viewModel.spacing) {
             ForEach(viewModel.data, id: viewModel.dataId) {
                 content($0)
                     .frame(width: viewModel.itemWidth)
@@ -48,8 +57,20 @@ public struct BCarousel<Data, ID, Content> : View where Data : RandomAccessColle
             }
         }
         .frame(width: proxy.size.width, height: proxy.size.height, alignment: .leading)
-        .offset(x: viewModel.offset)
-        .gesture(viewModel.dragGesture)
+        // 拖动量叠加在 offset 外：dragOffset 变化不经过 .animation(value: offset)，跟手无弹簧感；
+        // 手势取消归零时 offset 未变，无动画直接弹回对齐位置
+        .offset(x: viewModel.offset + dragOffset)
+        // 拖动量经 .updating 写入 @GestureState（手势结束或被取消时自动归零），
+        // 翻页判定在 onEnded（手势被抢占取消时 onEnded 不调用，但 dragOffset 已由 @GestureState 复位）
+        .gesture(
+            DragGesture()
+                .updating($dragOffset) { value, state, _ in
+                    state = viewModel.clampedDragOffset(value.translation.width)
+                }
+                .onEnded { value in
+                    viewModel.dragEnded(value.translation.width)
+                }
+        )
         .animation(viewModel.offsetAnimation, value: viewModel.offset)
         .onReceive(timer: viewModel.timer, perform: viewModel.receiveTimer)
         .onReceiveAppLifeCycle(perform: viewModel.setTimerActive)

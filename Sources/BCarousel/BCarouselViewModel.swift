@@ -111,8 +111,9 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
         }
     }
     
-    /// Offset x of the view drag.
-    @Published var dragOffset: CGFloat = .zero
+    /// 是否正在拖动（BCarousel 在 body 求值时根据 @GestureState 的 dragOffset 写入，
+    /// 手势被取消时也会归零，无残留）。自动轮播在拖动中暂停。
+    var isDragging = false
     
     /// size of GeometryProxy
     var viewSize: CGSize = .zero
@@ -230,10 +231,11 @@ extension BCarouselViewModel {
 
 // MARK: - Offset Method
 extension BCarouselViewModel {
-    /// current offset value
+    /// current offset value（不含拖动量：拖动量由视图层 @GestureState 的 dragOffset 叠加，
+    /// 手势被取消时自动归零，不会残留错位）
     var offset: CGFloat {
         let activeOffset = CGFloat(activeIndex) * itemActualWidth
-        return defaultPadding - activeOffset + dragOffset
+        return defaultPadding - activeOffset
     }
     
     /// change offset when acitveItem changes
@@ -262,43 +264,20 @@ extension BCarouselViewModel {
 
 // MARK: - Drag Gesture
 extension BCarouselViewModel {
-    /// drag gesture of view
-    var dragGesture: some Gesture {
-        DragGesture()
-            .onChanged(dragChanged)
-            .onEnded(dragEnded)
-    }
-    
-    private func dragChanged(_ value: DragGesture.Value) {
-        guard _canMove else { return }
-        
+    /// 拖动中由视图层 .updating($dragOffset) 调用：clamp 单次拖动最多一页宽
+    ///（避免一次拖动翻过多页）。dragOffset 的写入与归零都在视图层 @GestureState，
+    /// 手势结束**或被取消**时自动归零，不会残留错位。
+    func clampedDragOffset(_ translation: CGFloat) -> CGFloat {
+        guard _canMove else { return 0 }
         isAnimatedOffset = true
-        
-        /// Defines the maximum value of the drag
-        /// Avoid dragging more than the values of multiple subviews at the end of the drag,
-        /// and still only one subview is toggled
-        var offset: CGFloat = itemActualWidth
-        if value.translation.width > 0 {
-            offset = min(offset, value.translation.width)
-        } else {
-            offset = max(-offset, value.translation.width)
-        }
-        
-        /// set drag offset
-        dragOffset = offset
-        
-        /// stop active timer
-        isTimerActive = false
+        return max(-itemActualWidth, min(itemActualWidth, translation))
     }
     
-    private func dragEnded(_ value: DragGesture.Value) {
+    /// 拖动结束的翻页判定：拖动量超过阈值（默认 50pt）翻一页。
+    /// dragOffset 归零由视图层 @GestureState 自动完成（含手势被抢占取消的情形）。
+    func dragEnded(_ translation: CGFloat) {
         guard _canMove else { return }
-        /// reset drag offset
-        dragOffset = .zero
-        
-        /// reset timing and restart active timer
         resetTiming()
-        isTimerActive = true
         
         /// Defines the drag threshold
         /// At the end of the drag, if the drag value exceeds the drag threshold,
@@ -308,10 +287,10 @@ extension BCarouselViewModel {
         let dragThreshold: CGFloat = 50
         
         var activeIndex = self.activeIndex
-        if value.translation.width > dragThreshold {
+        if translation > dragThreshold {
             activeIndex -= 1
         }
-        if value.translation.width < -dragThreshold {
+        if translation < -dragThreshold {
             activeIndex += 1
         }
         self.activeIndex = max(0, min(activeIndex, data.count - 1))
@@ -325,6 +304,10 @@ extension BCarouselViewModel {
     func receiveTimer(_ value: Timer.TimerPublisher.Output) {
         /// Ignores listen when `isTimerActive` is false.
         guard isTimerActive else {
+            return
+        }
+        /// Ignores while dragging（isDragging 由视图层 @GestureState 推导，手势被取消时也会复位）
+        guard !isDragging else {
             return
         }
         /// increments of one and compare to the scrolling duration
