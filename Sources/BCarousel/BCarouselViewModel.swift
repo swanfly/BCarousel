@@ -36,8 +36,12 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
     private let _sidesScaling: CGFloat
     private let _autoScroll: BCarouselAutoScroll
     private let _canMove: Bool
+    /// 固定页宽：非 nil 时每个 item 固定该宽度（不依赖 GeometryReader 测量值）。
+    /// 用于容器存在 UIScrollView 桥接等 safe area 注入场景——此时测量宽可能停在 safe 宽，
+    /// 页宽小于视口会导致第一页右侧漏出第二页的一部分
+    private let _fixedItemWidth: CGFloat?
     
-    init(_ data: Data, id: KeyPath<Data.Element, ID>, index: Binding<Int>, spacing: CGFloat, headspace: CGFloat, sidesScaling: CGFloat, isWrap: Bool, autoScroll: BCarouselAutoScroll, canMove: Bool) {
+    init(_ data: Data, id: KeyPath<Data.Element, ID>, index: Binding<Int>, spacing: CGFloat, headspace: CGFloat, sidesScaling: CGFloat, isWrap: Bool, autoScroll: BCarouselAutoScroll, canMove: Bool, fixedItemWidth: CGFloat? = nil) {
         
         // 数据源为空或父视图刷新后变短时 index 可能越界，收敛到合法范围
         //（原实现对越界 fatalError，数据源变化后会直接崩溃）
@@ -50,6 +54,7 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
         self._isWrap = isWrap
         self._sidesScaling = sidesScaling
         self._autoScroll = autoScroll
+        self._fixedItemWidth = fixedItemWidth
         self._canMove = canMove
         
         if data.count > 1 && isWrap {
@@ -138,8 +143,8 @@ class BCarouselViewModel<Data, ID>: ObservableObject where Data : RandomAccessCo
 
 extension BCarouselViewModel where ID == Data.Element.ID, Data.Element : Identifiable {
     
-    convenience init(_ data: Data, index: Binding<Int>, spacing: CGFloat, headspace: CGFloat, sidesScaling: CGFloat, isWrap: Bool, autoScroll: BCarouselAutoScroll, canMove: Bool) {
-        self.init(data, id: \.id, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove)
+    convenience init(_ data: Data, index: Binding<Int>, spacing: CGFloat, headspace: CGFloat, sidesScaling: CGFloat, isWrap: Bool, autoScroll: BCarouselAutoScroll, canMove: Bool, fixedItemWidth: CGFloat? = nil) {
+        self.init(data, id: \.id, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove, fixedItemWidth: fixedItemWidth)
     }
 }
 
@@ -175,7 +180,11 @@ extension BCarouselViewModel {
     }
     
     var itemWidth: CGFloat {
-        max(0, viewSize.width - defaultPadding * 2)
+        // 固定页宽优先：绕过 GeometryReader 测量值（容器 safe area 注入时测量宽不可信）
+        if let fixed = _fixedItemWidth {
+            return max(0, fixed)
+        }
+        return max(0, viewSize.width - defaultPadding * 2)
     }
     
     var timer: TimePublisher? {

@@ -98,10 +98,12 @@ extension BCarousel {
     ///   - isWrap: Define views to scroll through in a loop, default is false.
     ///   - autoScroll: A enum that define view to scroll automatically. See
     ///     ``BCarouselAutoScroll``. default is `inactive`.
+    ///   - fixedItemWidth: 固定每个 item 的宽度（如全屏物理宽），非 nil 时不依赖容器测量宽，
+    ///     用于容器存在 safe area 注入导致测量宽偏小的场景，default is `nil`.
     ///   - content: The view builder that creates views dynamically.
-    public init(_ data: Data, id: KeyPath<Data.Element, ID>, index: Binding<Int> = .constant(0), spacing: CGFloat = 10, headspace: CGFloat = 10, sidesScaling: CGFloat = 0.8, isWrap: Bool = false, autoScroll: BCarouselAutoScroll = .inactive, canMove: Bool = true, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+    public init(_ data: Data, id: KeyPath<Data.Element, ID>, index: Binding<Int> = .constant(0), spacing: CGFloat = 10, headspace: CGFloat = 10, sidesScaling: CGFloat = 0.8, isWrap: Bool = false, autoScroll: BCarouselAutoScroll = .inactive, canMove: Bool = true, fixedItemWidth: CGFloat? = nil, @ViewBuilder content: @escaping (Data.Element) -> Content) {
         
-        self.viewModel = BCarouselViewModel(data, id: id, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove)
+        self.viewModel = BCarouselViewModel(data, id: id, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove, fixedItemWidth: fixedItemWidth)
         self.content = content
     }
     
@@ -124,10 +126,12 @@ extension BCarousel where ID == Data.Element.ID, Data.Element : Identifiable {
     ///   - isWrap: Define views to scroll through in a loop, default is false.
     ///   - autoScroll: A enum that define view to scroll automatically. See
     ///     ``BCarouselAutoScroll``. default is `inactive`.
+    ///   - fixedItemWidth: 固定每个 item 的宽度（如全屏物理宽），非 nil 时不依赖容器测量宽，
+    ///     用于容器存在 safe area 注入导致测量宽偏小的场景，default is `nil`.
     ///   - content: The view builder that creates views dynamically.
-    public init(_ data: Data, index: Binding<Int> = .constant(0), spacing: CGFloat = 10, headspace: CGFloat = 10, sidesScaling: CGFloat = 0.8, isWrap: Bool = false, autoScroll: BCarouselAutoScroll = .inactive, canMove: Bool = true, @ViewBuilder content: @escaping (Data.Element) -> Content) {
+    public init(_ data: Data, index: Binding<Int> = .constant(0), spacing: CGFloat = 10, headspace: CGFloat = 10, sidesScaling: CGFloat = 0.8, isWrap: Bool = false, autoScroll: BCarouselAutoScroll = .inactive, canMove: Bool = true, fixedItemWidth: CGFloat? = nil, @ViewBuilder content: @escaping (Data.Element) -> Content) {
         
-        self.viewModel = BCarouselViewModel(data, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove)
+        self.viewModel = BCarouselViewModel(data, index: index, spacing: spacing, headspace: headspace, sidesScaling: sidesScaling, isWrap: isWrap, autoScroll: autoScroll, canMove: canMove, fixedItemWidth: fixedItemWidth)
         self.content = content
     }
     

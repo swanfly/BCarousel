@@ -94,4 +94,29 @@ final class BCarouselTests: XCTestCase {
         model.syncExternalIndex()
         XCTAssertEqual(model.activeIndex, 0, "空数据时同步应把 activeIndex 收敛为 0")
     }
+    
+    // MARK: - 固定页宽
+    
+    /// fixedItemWidth 非 nil 时页宽用固定值，不受 viewSize（容器测量宽）影响；
+    /// offset 同步按固定页宽对齐（页宽恒等于视口宽，第一页不会漏出第二页）
+    func testFixedItemWidthOverridesViewSize() {
+        let box = Box(0)
+        let model = BCarouselViewModel(Array(0 ..< 3), id: \.self, index: makeBinding(box), spacing: 0, headspace: 0, sidesScaling: 1.0, isWrap: true, autoScroll: .inactive, canMove: true, fixedItemWidth: 380)
+        
+        model.viewSize = CGSize(width: 296, height: 200) // 容器测量宽偏小（safe 宽）的场景
+        XCTAssertEqual(model.itemWidth, 380, "页宽应为固定值 380，而非测量值 296")
+        XCTAssertEqual(model.offset, -380, "wrap 下 activeIndex=1，offset 按固定页宽对齐")
+        
+        model.activeIndex = 2
+        XCTAssertEqual(model.offset, -760, "翻页后 offset 仍按固定页宽对齐")
+    }
+    
+    /// fixedItemWidth 为 nil（默认）时保持原行为：页宽 = 测量宽 - defaultPadding×2
+    func testNilFixedItemWidthKeepsMeasuredWidth() {
+        let box = Box(0)
+        let model = makeModel(box, count: 3, isWrap: true)
+        
+        model.viewSize = CGSize(width: 296, height: 200)
+        XCTAssertEqual(model.itemWidth, 296)
+    }
 }
